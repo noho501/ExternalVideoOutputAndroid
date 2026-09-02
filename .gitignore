@@ -1,3 +1,17 @@
+# Build outputs
+build/
+*.apk
+*.aab
+*.aar
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+local.properties
+.gradle/
+
 # Compiled class file
 *.class
 
