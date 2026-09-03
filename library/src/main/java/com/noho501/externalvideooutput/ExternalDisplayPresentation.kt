@@ -21,15 +21,11 @@ import android.view.WindowManager
 internal class ExternalDisplayPresentation(
     context: Context,
     display: Display,
-    private val onSurfaceReady: (Surface?) -> Unit
+    private val onSurfaceReady: (Surface?, Int, Int) -> Unit
 ) : Presentation(context, display) {
 
     init {
-        // Keep the presentation window on top and prevent the system from dimming it.
-        window?.addFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-        )
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,16 +36,14 @@ internal class ExternalDisplayPresentation(
 
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                onSurfaceReady(holder.surface)
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                // Surface dimensions have changed – the existing Surface handle remains valid;
-                // callers using Camera2 / MediaProjection will adapt through their own resize logic.
+                onSurfaceReady(holder.surface, width, height)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                onSurfaceReady(null)
+                onSurfaceReady(null, 0, 0)
             }
         })
     }

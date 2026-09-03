@@ -13,7 +13,7 @@ interface ExternalVideoOutputListener {
      * @param surface The [Surface] backed by the external display.  Attach this surface as a
      *   capture target of Camera2, MediaProjection, or RootEncoder.
      */
-    fun onExternalDisplayConnected(surface: Surface)
+    fun onExternalDisplayConnected(surface: Surface, width: Int, height: Int)
 
     /**
      * Called on the main thread when the external display is disconnected or the [Surface] is

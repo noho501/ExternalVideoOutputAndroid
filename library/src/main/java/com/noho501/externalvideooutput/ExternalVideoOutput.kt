@@ -70,6 +70,11 @@ class ExternalVideoOutput private constructor() {
     // Display listener
     // ------------------------------------------------------------------
 
+    @Volatile var width: Int = 0
+        private set
+    @Volatile var height: Int = 0
+        private set
+
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
             Log.d(TAG, "Display added: $displayId")
@@ -162,13 +167,15 @@ class ExternalVideoOutput private constructor() {
         val ctx = context ?: return
         dismissPresentation()
         Log.d(TAG, "Showing presentation on display ${display.displayId}: ${display.name}")
-        val p = ExternalDisplayPresentation(ctx, display) { newSurface ->
-            onSurfaceAvailable(newSurface)
+        val p = ExternalDisplayPresentation(ctx, display) { newSurface, w, h ->
+            onSurfaceAvailable(newSurface, w, h)
         }
         p.setOnDismissListener {
             if (presentation == p) {
                 Log.d(TAG, "Presentation dismissed")
                 surface = null
+                width = 0
+                height = 0
                 isConnected = false
                 presentation = null
                 listener?.onExternalDisplayDisconnected()
@@ -182,15 +189,19 @@ class ExternalVideoOutput private constructor() {
         presentation?.dismiss()
         presentation = null
         surface = null
+        width = 0
+        height = 0
         isConnected = false
     }
 
-    private fun onSurfaceAvailable(newSurface: Surface?) {
+    private fun onSurfaceAvailable(newSurface: Surface?, w: Int, h: Int) {
         surface = newSurface
+        width = w
+        height = h
         isConnected = newSurface != null
         if (newSurface != null) {
-            Log.d(TAG, "External surface ready: $newSurface")
-            listener?.onExternalDisplayConnected(newSurface)
+            Log.d(TAG, "External surface ready: $newSurface, size: $w x $h")
+            listener?.onExternalDisplayConnected(newSurface, w, h)
         }
     }
 }
