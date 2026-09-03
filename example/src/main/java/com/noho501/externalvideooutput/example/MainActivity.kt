@@ -3,7 +3,6 @@ package com.noho501.externalvideooutput.example
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
-import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
@@ -25,7 +24,6 @@ import androidx.core.content.ContextCompat
 import com.noho501.externalvideooutput.ExternalVideoOutput
 import com.noho501.externalvideooutput.ExternalVideoOutputListener
 import com.noho501.externalvideooutput.example.databinding.ActivityMainBinding
-import java.util.concurrent.Executors
 
 /**
  * Example activity demonstrating ExternalVideoOutput with Camera2.
@@ -60,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private var lastFpsTimestamp = System.currentTimeMillis()
     private val fpsHandler = Handler(android.os.Looper.getMainLooper())
     private val fpsRunnable = object : Runnable {
+        @SuppressLint("SetTextI18n")
         override fun run() {
             val now = System.currentTimeMillis()
             val elapsed = (now - lastFpsTimestamp) / 1000f
@@ -115,6 +114,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupExternalVideoOutput() {
         ExternalVideoOutput.shared.listener = object : ExternalVideoOutputListener {
+            @SuppressLint("SetTextI18n")
             override fun onExternalDisplayConnected(surface: Surface) {
                 Log.d(TAG, "External display connected, surface=$surface")
                 binding.tvStatus.text = "External display: connected"
@@ -122,6 +122,7 @@ class MainActivity : AppCompatActivity() {
                 reopenCaptureSession()
             }
 
+            @SuppressLint("SetTextI18n")
             override fun onExternalDisplayDisconnected() {
                 Log.d(TAG, "External display disconnected")
                 binding.tvStatus.text = "External display: disconnected"
@@ -178,20 +179,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopCamera() {
-        captureSession?.close()
-        captureSession = null
-        cameraDevice?.close()
-        cameraDevice = null
-        cameraThread?.quitSafely()
-        cameraThread = null
-        cameraHandler = null
+        cameraHandler?.post {
+            try {
+                captureSession?.close()
+                captureSession = null
+                cameraDevice?.close()
+                cameraDevice = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Error when stop camera: ${e.message}")
+            } finally {
+                cameraThread?.quitSafely()
+                cameraThread = null
+                cameraHandler = null
+            }
+        }
     }
 
     private fun reopenCaptureSession() {
-        val camera = cameraDevice ?: return
-        captureSession?.close()
-        captureSession = null
-        createCaptureSession(camera)
+        cameraHandler?.post {
+            val camera = cameraDevice ?: return@post
+            try {
+                captureSession?.close()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error when close old session: ${e.message}")
+            }
+            captureSession = null
+            createCaptureSession(camera)
+        }
     }
 
     private fun createCaptureSession(camera: CameraDevice) {
@@ -205,13 +219,19 @@ class MainActivity : AppCompatActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val outputConfigs = targets.map { OutputConfiguration(it) }
-            val executor = Executors.newSingleThreadExecutor()
+
+            val executor = java.util.concurrent.Executor { command -> cameraHandler?.post(command) }
+
             val config = SessionConfiguration(
                 SessionConfiguration.SESSION_REGULAR,
                 outputConfigs,
                 executor,
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
+                        if (cameraDevice == null) {
+                            session.close()
+                            return
+                        }
                         captureSession = session
                         startRepeatingRequest(session, targets)
                     }
@@ -227,6 +247,10 @@ class MainActivity : AppCompatActivity() {
                 targets,
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
+                        if (cameraDevice == null) {
+                            session.close()
+                            return
+                        }
                         captureSession = session
                         startRepeatingRequest(session, targets)
                     }
@@ -240,20 +264,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRepeatingRequest(session: CameraCaptureSession, targets: List<Surface>) {
-        val requestBuilder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-        targets.forEach { requestBuilder.addTarget(it) }
-        requestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-            android.util.Range(30, 60))
-        val captureCallback = object : CameraCaptureSession.CaptureCallback() {
-            override fun onCaptureCompleted(
-                session: CameraCaptureSession,
-                request: CaptureRequest,
-                result: android.hardware.camera2.TotalCaptureResult
-            ) {
-                frameCount++
+        try {
+            val requestBuilder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+            targets.forEach { requestBuilder.addTarget(it) }
+            requestBuilder.set(
+                CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                android.util.Range(30, 60)
+            )
+            val captureCallback = object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(
+                    session: CameraCaptureSession,
+                    request: CaptureRequest,
+                    result: android.hardware.camera2.TotalCaptureResult
+                ) {
+                    frameCount++
+                }
             }
+
+            session.setRepeatingRequest(requestBuilder.build(), captureCallback, cameraHandler)
+
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "Skip request because session canceled: ${e.message}")
+        } catch (e: android.hardware.camera2.CameraAccessException) {
+            Log.e(TAG, "Camera disconnected: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected exception: ${e.message}")
         }
-        session.setRepeatingRequest(requestBuilder.build(), captureCallback, cameraHandler)
     }
 
     private fun selectBackCamera(manager: CameraManager): String? {
