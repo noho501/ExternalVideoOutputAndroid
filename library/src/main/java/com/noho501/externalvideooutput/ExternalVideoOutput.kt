@@ -75,6 +75,9 @@ class ExternalVideoOutput private constructor() {
     @Volatile var height: Int = 0
         private set
 
+    @Volatile private var targetVideoWidth: Int = 1920
+    @Volatile private var targetVideoHeight: Int = 1080
+
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
             Log.d(TAG, "Display added: $displayId")
@@ -103,7 +106,10 @@ class ExternalVideoOutput private constructor() {
      *
      * @param context An application or activity [Context].
      */
-    fun start(context: Context) {
+    fun start(context: Context, videoWidth: Int, videoHeight: Int) {
+        this.targetVideoWidth = videoWidth
+        this.targetVideoHeight = videoHeight
+
         if (!running.compareAndSet(false, true)) {
             Log.w(TAG, "start() called but already running")
             return
@@ -167,7 +173,7 @@ class ExternalVideoOutput private constructor() {
         val ctx = context ?: return
         dismissPresentation()
         Log.d(TAG, "Showing presentation on display ${display.displayId}: ${display.name}")
-        val p = ExternalDisplayPresentation(ctx, display) { newSurface, w, h ->
+        val p = ExternalDisplayPresentation(ctx, display, targetVideoWidth, targetVideoHeight) { newSurface, w, h ->
             onSurfaceAvailable(newSurface, w, h)
         }
         p.setOnDismissListener {
